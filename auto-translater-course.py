@@ -39,15 +39,6 @@ dir_translated = {
     "ko": "testdir/docs/ko"
 }
 
-# 由 ChatGPT 翻译的提示
-tips_translated_by_chatgpt = {
-    "en": "\n\n> This post is translated using ChatGPT, please [**feedback**](https://github.com/linyuxuanlin/Wiki_MkDocs/issues/new) if any omissions.",
-    "es": "\n\n> Este post está traducido usando ChatGPT, por favor [**feedback**](https://github.com/linyuxuanlin/Wiki_MkDocs/issues/new) si hay alguna omisión.",
-    "ar": "\n\n> تمت ترجمة هذه المشاركة باستخدام ChatGPT، يرجى [**تزويدنا بتعليقاتكم**](https://github.com/linyuxuanlin/Wiki_MkDocs/issues/new) إذا كانت هناك أي حذف أو إهمال.",
-    "ja": "\n\n> この投稿は ChatGPT を使用して翻訳されています。不備がありましたら[**フィードバック**](https://github.com/linyuxuanlin/Wiki_MkDocs/issues/new)をお願いします。",
-    "ko": "\n\n> 이 게시물은 ChatGPT를 사용하여 번역되었습니다. 누락된 내용이 있으면 [**피드백**](https://github.com/linyuxuanlin/Wiki_MkDocs/issues/new)을 주시기 바랍니다."
-}
-
 # 文章使用英文撰写的提示，避免本身为英文的文章被重复翻译为英文
 marker_written_in_en = "\n> This post was originally written in English.\n"
 # 即使在已处理的列表中，仍需要重新翻译的标记
@@ -316,7 +307,7 @@ def translate_file(input_file, relative_path, lang):
             current_paragraph += paragraph
         else:
             # 否则翻译当前段落，并将翻译结果添加到输出列表中
-            output_paragraphs.append(translate_text(current_paragraph, lang,"main-body"))
+            output_paragraphs.append(translate_text(current_paragraph, lang, "main-body"))
             current_paragraph = paragraph
 
     # 处理最后一个段落
@@ -338,10 +329,6 @@ def translate_file(input_file, relative_path, lang):
     if front_matter_match:
         # 加入 Front Matter
         output_text = "---\n" + front_matter_text_processed + "---\n\n" + output_text
-
-    # 加入由 ChatGPT 翻译的提示
-    if lang in tips_translated_by_chatgpt:
-        output_text = output_text + tips_translated_by_chatgpt[lang]
 
     # 最后，将占位词替换为对应的替换文本
     for placeholder, replacement in placeholder_dict.items():
@@ -400,6 +387,8 @@ def main():
                     # 获取相对路径
                     relative_path = os.path.relpath(os.path.join(root, filename), dir_to_translate)
                     input_file = os.path.join(root, filename)
+                    # print("relative_path: ", relative_path)
+                    # print("input_file: ", input_file)
 
                     # 读取 Markdown 文件的内容
                     with open(input_file, "r", encoding="utf-8") as f:
