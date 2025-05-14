@@ -7,8 +7,10 @@ import yaml  # pip install PyYAML
 import env
 
 # 设置 OpenAI API Key 和 API Base 参数，通过 env.py 传入
-openai.api_key = os.environ.get("CHATGPT_API_KEY")
-openai.api_base = os.environ.get("CHATGPT_API_BASE")
+client = openai.OpenAI(
+    api_key=os.environ.get("CHATGPT_API_KEY"),
+    base_url=os.environ.get("CHATGPT_API_BASE")
+)
 
 # 设置最大输入字段，超出会拆分输入，防止超出输入字数限制
 max_length = 1800
@@ -152,7 +154,8 @@ def translate_text(text, lang, type):
     # Front Matter 与正文内容使用不同的 prompt 翻译
     # 翻译 Front Matter。
     if type == "front-matter":
-        completion = openai.ChatCompletion.create(
+        completion = client.chat.completions.create(
+            # todo syj 替换 Model
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a professional translation engine, please translate the text into a colloquial, professional, elegant and fluent content, without the style of machine translation. You must only translate the text content, never interpret it."},
@@ -161,7 +164,7 @@ def translate_text(text, lang, type):
         )  
     # 翻译正文
     elif type== "main-body":
-        completion = openai.ChatCompletion.create(
+        completion = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a professional translation engine, please translate the text into a colloquial, professional, elegant and fluent content, without the style of machine translation. You must maintain the original markdown format. You must not translate the `[to_be_replace[x]]` field.You must only translate the text content, never interpret it."},
