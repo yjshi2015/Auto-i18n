@@ -39,11 +39,6 @@ dir_translated = {
     "ko": "testdir/docs/ko"
 }
 
-# 文章使用英文撰写的提示，避免本身为英文的文章被重复翻译为英文
-marker_written_in_en = "\n> This post was originally written in English.\n"
-# 即使在已处理的列表中，仍需要重新翻译的标记
-marker_force_translate = "\n[translate]\n"
-
 # Front Matter 处理规则
 front_matter_translation_rules = {
     # 调用 ChatGPT 自动翻译
@@ -92,13 +87,6 @@ replace_rules = [
             "ko": "](https://wiki-power.com/ko/"
         }
     }
-    # {
-    #    # 不同语言可使用不同图床
-    #    "orginal_text": "![](https://wiki-media-1253965369.cos.ap-guangzhou.myqcloud.com/",
-    #    "replaced_en": "![](https://f004.backblazeb2.com/file/wiki-media/",
-    #    "replaced_es": "![](https://f004.backblazeb2.com/file/wiki-media/",
-    #    "replaced_ar": "![](https://f004.backblazeb2.com/file/wiki-media/",
-    # },
 ]
 
 # Front Matter 固定字段替换规则。
@@ -263,13 +251,6 @@ def translate_file(input_file, relative_path, lang):
         input_text = input_text.replace(find_text, placeholder)
         placeholder_dict[placeholder] = replace_with
 
-    # 删除译文中指示强制翻译的 marker
-    input_text = input_text.replace(marker_force_translate, "")
-
-    # 删除其他出英文外其他语言译文中的 marker_written_in_en
-    if lang != "en":
-        input_text = input_text.replace(marker_written_in_en, "")
-
     # 使用正则表达式来匹配 Front Matter
     front_matter_match = re.search(r'---\n(.*?)\n---', input_text, re.DOTALL)
     if front_matter_match:
@@ -288,10 +269,7 @@ def translate_file(input_file, relative_path, lang):
         input_text = input_text.replace(
             "---\n"+front_matter_text+"\n---\n", "")
     else:
-        # print("没有找到front matter，不进行处理。")
         pass
-
-    # print(input_text) # debug 用，看看输入的是什么
 
     # 拆分文章
     paragraphs = input_text.split("\n\n")
@@ -387,36 +365,14 @@ def main():
                     # 获取相对路径
                     relative_path = os.path.relpath(os.path.join(root, filename), dir_to_translate)
                     input_file = os.path.join(root, filename)
-                    # print("relative_path: ", relative_path)
-                    # print("input_file: ", input_file)
 
-                    # 读取 Markdown 文件的内容
-                    with open(input_file, "r", encoding="utf-8") as f:
-                        md_content = f.read()
-
-                    if marker_force_translate in md_content:  # 如果有强制翻译的标识，则执行这部分的代码
-                        if marker_written_in_en in md_content:  # 翻译为除英文之外的语言
-                            print("Pass the en-en translation: ", relative_path)
-                            sys.stdout.flush()
-                            for lang in args.target:
-                                if lang != "en":
-                                    translate_file(input_file, relative_path, lang)
-                        else:  # 翻译为所有语言
-                            for lang in args.target:
-                                translate_file(input_file, relative_path, lang)
-                    elif filename in exclude_list:  # 不进行翻译
+                    if filename in exclude_list:  # 不进行翻译
                         print(f"Pass the post in exclude_list: {relative_path}")
                         sys.stdout.flush()
                     elif relative_path in processed_list_content:  # 不进行翻译
                         print(f"Pass the post in processed_list: {relative_path}")
                         sys.stdout.flush()
-                    elif marker_written_in_en in md_content:  # 翻译为除英文之外的语言
-                        print(f"Pass the en-en translation: {relative_path}")
-                        sys.stdout.flush()
-                        for lang in args.target:
-                            if lang != "en":
-                                translate_file(input_file, relative_path, lang)
-                    else:  # 翻译为所有语言
+                    else:  # 翻译为所有目标语言
                         for lang in args.target:
                             translate_file(input_file, relative_path, lang)
 
