@@ -5,6 +5,7 @@ import sys
 import re
 import yaml  # pip install PyYAML
 import env
+import argparse
 
 # 设置 OpenAI API Key 和 API Base 参数，通过 env.py 传入
 client = openai.OpenAI(
@@ -15,20 +16,28 @@ client = openai.OpenAI(
 # 设置最大输入字段，超出会拆分输入，防止超出输入字数限制
 max_length = 1800
 
+# 支持的语言列表
+SUPPORTED_LANGUAGES = {
+    "en": "English",
+    "es": "Spanish",
+    "ar": "Arabic",
+    "ja": "Japanese",
+    "ko": "Korean"
+}
+
+# 默认配置
+DEFAULT_DIR_TO_TRANSLATE = "testdir/to-translate"
+DEFAULT_EXCLUDE_LIST = ["index.md", "Contact-and-Subscribe.md", "WeChat.md"]
+DEFAULT_PROCESSED_LIST = "processed_list.txt"
+
 # 设置翻译的路径
-dir_to_translate = "testdir/to-translate"
 dir_translated = {
     "en": "testdir/docs/en",
     "es": "testdir/docs/es",
     "ar": "testdir/docs/ar",
-    "ja": "testdir/docs/ja",  # 添加日语
-    "ko": "testdir/docs/ko"   # 添加韩语
+    "ja": "testdir/docs/ja",
+    "ko": "testdir/docs/ko"
 }
-
-# 不进行翻译的文件列表
-exclude_list = ["index.md", "Contact-and-Subscribe.md", "WeChat.md"]
-# 已处理的 Markdown 文件名的列表，会自动生成
-processed_list = "processed_list.txt"
 
 # 由 ChatGPT 翻译的提示
 tips_translated_by_chatgpt = {
@@ -342,77 +351,104 @@ def translate_file(input_file, relative_path, lang):
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(output_text)
 
-try:
-    # 创建一个外部列表文件，存放已处理的 Markdown 文件名列表
-    if not os.path.exists(processed_list):
-        with open(processed_list, "w", encoding="utf-8") as f:
-            print("processed_list created")
-            sys.stdout.flush()
-
-    # 读取已处理的文件列表
-    with open(processed_list, "r", encoding="utf-8") as f:
-        processed_list_content = f.read().splitlines()
-
-    # 使用 os.walk 递归遍历目录
-    for root, dirs, files in os.walk(dir_to_translate):
-        # 按文件名称顺序排序
-        sorted_files = sorted(files)
-        
-        for filename in sorted_files:
-            if filename.endswith(".md"):
-                # 获取相对路径
-                relative_path = os.path.relpath(os.path.join(root, filename), dir_to_translate)
-                input_file = os.path.join(root, filename)
-
-                # 读取 Markdown 文件的内容
-                with open(input_file, "r", encoding="utf-8") as f:
-                    md_content = f.read()
-
-                if marker_force_translate in md_content:  # 如果有强制翻译的标识，则执行这部分的代码
-                    if marker_written_in_en in md_content:  # 翻译为除英文之外的语言
-                        print("Pass the en-en translation: ", relative_path)
-                        sys.stdout.flush()
-                        translate_file(input_file, relative_path, "es")
-                        translate_file(input_file, relative_path, "ar")
-                        translate_file(input_file, relative_path, "ja")
-                        translate_file(input_file, relative_path, "ko")
-                    else:  # 翻译为所有语言
-                        translate_file(input_file, relative_path, "en")
-                        translate_file(input_file, relative_path, "es")
-                        translate_file(input_file, relative_path, "ar")
-                        translate_file(input_file, relative_path, "ja")
-                        translate_file(input_file, relative_path, "ko")
-                elif filename in exclude_list:  # 不进行翻译
-                    print(f"Pass the post in exclude_list: {relative_path}")
-                    sys.stdout.flush()
-                elif relative_path in processed_list_content:  # 不进行翻译
-                    print(f"Pass the post in processed_list: {relative_path}")
-                    sys.stdout.flush()
-                elif marker_written_in_en in md_content:  # 翻译为除英文之外的语言
-                    print(f"Pass the en-en translation: {relative_path}")
-                    sys.stdout.flush()
-                    for lang in ["es", "ar", "ja", "ko"]:
-                        translate_file(input_file, relative_path, lang)
-                else:  # 翻译为所有语言
-                    for lang in ["en", "es", "ar", "ja", "ko"]:
-                        translate_file(input_file, relative_path, lang)
-
-                # 将处理完成的文件名加到列表，下次跳过不处理
-                if relative_path not in processed_list_content:
-                    print(f"Added into processed_list: {relative_path}")
-                    with open(processed_list, "a", encoding="utf-8") as f:
-                        f.write(f"{relative_path}\n")
-
-                # 强制将缓冲区中的数据刷新到终端中，使用 GitHub Action 时方便实时查看过程
+def main():
+    # 创建命令行参数解析器
+    parser = argparse.ArgumentParser(description='自动翻译 Markdown 文件')
+    parser.add_argument('source', help='源语言代码 (例如: zh)')
+    parser.add_argument('target', nargs='+', help='目标语言代码列表 (例如: ja ko en)')
+    parser.add_argument('--dir', default=DEFAULT_DIR_TO_TRANSLATE, help='要翻译的目录路径')
+    parser.add_argument('--exclude', nargs='+', default=DEFAULT_EXCLUDE_LIST, help='要排除的文件列表')
+    
+    # 解析命令行参数
+    args = parser.parse_args()
+    
+    # 验证源语言
+    if args.source not in ["zh"]:
+        print(f"错误：不支持的源语言 '{args.source}'")
+        sys.exit(1)
+    
+    # 验证目标语言
+    invalid_langs = [lang for lang in args.target if lang not in SUPPORTED_LANGUAGES]
+    if invalid_langs:
+        print(f"错误：不支持的目标语言 {invalid_langs}")
+        print(f"支持的目标语言: {', '.join(SUPPORTED_LANGUAGES.keys())}")
+        sys.exit(1)
+    
+    # 设置工作目录和排除列表
+    dir_to_translate = args.dir
+    exclude_list = args.exclude
+    processed_list = DEFAULT_PROCESSED_LIST
+    
+    try:
+        # 创建一个外部列表文件，存放已处理的 Markdown 文件名列表
+        if not os.path.exists(processed_list):
+            with open(processed_list, "w", encoding="utf-8") as f:
+                print("processed_list created")
                 sys.stdout.flush()
 
-    # 所有任务完成的提示
-    print("Congratulations! All files processed done.")
-    sys.stdout.flush()
+        # 读取已处理的文件列表
+        with open(processed_list, "r", encoding="utf-8") as f:
+            processed_list_content = f.read().splitlines()
 
-except Exception as e:
-    # 捕获异常并输出错误信息
-    print(f"An error has occurred: {e}")
-    sys.stdout.flush()
-    raise SystemExit(1)  # 1 表示非正常退出，可以根据需要更改退出码
-    # os.remove(input_file)  # 删除源文件
+        # 使用 os.walk 递归遍历目录
+        for root, dirs, files in os.walk(dir_to_translate):
+            # 按文件名称顺序排序
+            sorted_files = sorted(files)
+            
+            for filename in sorted_files:
+                if filename.endswith(".md"):
+                    # 获取相对路径
+                    relative_path = os.path.relpath(os.path.join(root, filename), dir_to_translate)
+                    input_file = os.path.join(root, filename)
+
+                    # 读取 Markdown 文件的内容
+                    with open(input_file, "r", encoding="utf-8") as f:
+                        md_content = f.read()
+
+                    if marker_force_translate in md_content:  # 如果有强制翻译的标识，则执行这部分的代码
+                        if marker_written_in_en in md_content:  # 翻译为除英文之外的语言
+                            print("Pass the en-en translation: ", relative_path)
+                            sys.stdout.flush()
+                            for lang in args.target:
+                                if lang != "en":
+                                    translate_file(input_file, relative_path, lang)
+                        else:  # 翻译为所有语言
+                            for lang in args.target:
+                                translate_file(input_file, relative_path, lang)
+                    elif filename in exclude_list:  # 不进行翻译
+                        print(f"Pass the post in exclude_list: {relative_path}")
+                        sys.stdout.flush()
+                    elif relative_path in processed_list_content:  # 不进行翻译
+                        print(f"Pass the post in processed_list: {relative_path}")
+                        sys.stdout.flush()
+                    elif marker_written_in_en in md_content:  # 翻译为除英文之外的语言
+                        print(f"Pass the en-en translation: {relative_path}")
+                        sys.stdout.flush()
+                        for lang in args.target:
+                            if lang != "en":
+                                translate_file(input_file, relative_path, lang)
+                    else:  # 翻译为所有语言
+                        for lang in args.target:
+                            translate_file(input_file, relative_path, lang)
+
+                    # 将处理完成的文件名加到列表，下次跳过不处理
+                    if relative_path not in processed_list_content:
+                        print(f"Added into processed_list: {relative_path}")
+                        with open(processed_list, "a", encoding="utf-8") as f:
+                            f.write(f"{relative_path}\n")
+
+                    # 强制将缓冲区中的数据刷新到终端中，使用 GitHub Action 时方便实时查看过程
+                    sys.stdout.flush()
+
+        # 所有任务完成的提示
+        print("Congratulations! All files processed done.")
+        sys.stdout.flush()
+
+    except Exception as e:
+        # 捕获异常并输出错误信息
+        print(f"An error has occurred: {e}")
+        sys.stdout.flush()
+        raise SystemExit(1)
+
+if __name__ == "__main__":
+    main()
