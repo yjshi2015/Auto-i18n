@@ -20,7 +20,9 @@ dir_to_translate = "testdir/to-translate"
 dir_translated = {
     "en": "testdir/docs/en",
     "es": "testdir/docs/es",
-    "ar": "testdir/docs/ar"
+    "ar": "testdir/docs/ar",
+    "ja": "testdir/docs/ja",  # 添加日语
+    "ko": "testdir/docs/ko"   # 添加韩语
 }
 
 # 不进行翻译的文件列表
@@ -32,7 +34,9 @@ processed_list = "processed_list.txt"
 tips_translated_by_chatgpt = {
     "en": "\n\n> This post is translated using ChatGPT, please [**feedback**](https://github.com/linyuxuanlin/Wiki_MkDocs/issues/new) if any omissions.",
     "es": "\n\n> Este post está traducido usando ChatGPT, por favor [**feedback**](https://github.com/linyuxuanlin/Wiki_MkDocs/issues/new) si hay alguna omisión.",
-    "ar": "\n\n> تمت ترجمة هذه المشاركة باستخدام ChatGPT، يرجى [**تزويدنا بتعليقاتكم**](https://github.com/linyuxuanlin/Wiki_MkDocs/issues/new) إذا كانت هناك أي حذف أو إهمال."
+    "ar": "\n\n> تمت ترجمة هذه المشاركة باستخدام ChatGPT، يرجى [**تزويدنا بتعليقاتكم**](https://github.com/linyuxuanlin/Wiki_MkDocs/issues/new) إذا كانت هناك أي حذف أو إهمال.",
+    "ja": "\n\n> この投稿は ChatGPT を使用して翻訳されています。不備がありましたら[**フィードバック**](https://github.com/linyuxuanlin/Wiki_MkDocs/issues/new)をお願いします。",
+    "ko": "\n\n> 이 게시물은 ChatGPT를 사용하여 번역되었습니다. 누락된 내용이 있으면 [**피드백**](https://github.com/linyuxuanlin/Wiki_MkDocs/issues/new)을 주시기 바랍니다."
 }
 
 # 文章使用英文撰写的提示，避免本身为英文的文章被重复翻译为英文
@@ -62,6 +66,8 @@ replace_rules = [
             "en": "> Original: <https://wiki-power.com/>",
             "es": "> Dirección original del artículo: <https://wiki-power.com/>",
             "ar": "> عنوان النص: <https://wiki-power.com/>",
+            "ja": "> 原文のアドレス：<https://wiki-power.com/>",
+            "ko": "> 원문 주소：<https://wiki-power.com/>"
         }
     },
     {
@@ -71,6 +77,8 @@ replace_rules = [
             "en": "> This post is protected by [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by/4.0/deed.en) agreement, should be reproduced with attribution.",
             "es": "> Este artículo está protegido por la licencia [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by/4.0/deed.zh). Si desea reproducirlo, por favor indique la fuente.",
             "ar": "> يتم حماية هذا المقال بموجب اتفاقية [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by/4.0/deed.zh)، يُرجى ذكر المصدر عند إعادة النشر.",
+            "ja": "> この記事は [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by/4.0/deed.ja) ライセンスで保護されています。転載の際は出典を明記してください。",
+            "ko": "> 이 글은 [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by/4.0/deed.ko) 라이선스로 보호됩니다. 출처를 명시하여 재게시해 주세요."
         }
     },
     {
@@ -80,6 +88,8 @@ replace_rules = [
             "en": "](https://wiki-power.com/en/",
             "es": "](https://wiki-power.com/es/",
             "ar": "](https://wiki-power.com/ar/",
+            "ja": "](https://wiki-power.com/ja/",
+            "ko": "](https://wiki-power.com/ko/"
         }
     }
     # {
@@ -99,6 +109,8 @@ front_matter_replace_rules = [
             "en": "Categories 1",
             "es": "Categorías 1",
             "ar": "الفئة 1",
+            "ja": "カテゴリー 1",
+            "ko": "카테고리 1"
         }
     },
     {
@@ -107,6 +119,8 @@ front_matter_replace_rules = [
             "en": "Categories 2",
             "es": "Categorías 2",
             "ar": "الفئة 2",
+            "ja": "カテゴリー 2",
+            "ko": "카테고리 2"
         }
     },
     {
@@ -115,6 +129,8 @@ front_matter_replace_rules = [
             "en": "Tags 1",
             "es": "Etiquetas 1",
             "ar": "بطاقة 1",
+            "ja": "タグ 1",
+            "ko": "태그 1"
         }
     },
     {
@@ -123,6 +139,8 @@ front_matter_replace_rules = [
             "en": "Tags 2",
             "es": "Etiquetas 2",
             "ar": "بطاقة 2",
+            "ja": "タグ 2",
+            "ko": "태그 2"
         }
     },
 ]
@@ -148,7 +166,9 @@ def translate_text(text, lang, type):
     target_lang = {
         "en": "English",
         "es": "Spanish",
-        "ar": "Arabic"
+        "ar": "Arabic",
+        "ja": "Japanese",  # 添加日语
+        "ko": "Korean"     # 添加韩语
     }[lang]
     
     # Front Matter 与正文内容使用不同的 prompt 翻译
@@ -311,12 +331,8 @@ def translate_file(input_file, relative_path, lang):
         output_text = "---\n" + front_matter_text_processed + "---\n\n" + output_text
 
     # 加入由 ChatGPT 翻译的提示
-    if lang == "en":
-        output_text = output_text + tips_translated_by_chatgpt["en"]
-    elif lang == "es":
-        output_text = output_text + tips_translated_by_chatgpt["es"]
-    elif lang == "ar":
-        output_text = output_text + tips_translated_by_chatgpt["ar"]
+    if lang in tips_translated_by_chatgpt:
+        output_text = output_text + tips_translated_by_chatgpt[lang]
 
     # 最后，将占位词替换为对应的替换文本
     for placeholder, replacement in placeholder_dict.items():
@@ -358,10 +374,14 @@ try:
                         sys.stdout.flush()
                         translate_file(input_file, relative_path, "es")
                         translate_file(input_file, relative_path, "ar")
+                        translate_file(input_file, relative_path, "ja")
+                        translate_file(input_file, relative_path, "ko")
                     else:  # 翻译为所有语言
                         translate_file(input_file, relative_path, "en")
                         translate_file(input_file, relative_path, "es")
                         translate_file(input_file, relative_path, "ar")
+                        translate_file(input_file, relative_path, "ja")
+                        translate_file(input_file, relative_path, "ko")
                 elif filename in exclude_list:  # 不进行翻译
                     print(f"Pass the post in exclude_list: {relative_path}")
                     sys.stdout.flush()
@@ -371,10 +391,10 @@ try:
                 elif marker_written_in_en in md_content:  # 翻译为除英文之外的语言
                     print(f"Pass the en-en translation: {relative_path}")
                     sys.stdout.flush()
-                    for lang in ["es", "ar"]:
+                    for lang in ["es", "ar", "ja", "ko"]:
                         translate_file(input_file, relative_path, lang)
                 else:  # 翻译为所有语言
-                    for lang in ["en", "es", "ar"]:
+                    for lang in ["en", "es", "ar", "ja", "ko"]:
                         translate_file(input_file, relative_path, lang)
 
                 # 将处理完成的文件名加到列表，下次跳过不处理
