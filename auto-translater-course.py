@@ -22,7 +22,8 @@ SUPPORTED_LANGUAGES = {
     "es": "Spanish",
     "ar": "Arabic",
     "ja": "Japanese",
-    "ko": "Korean"
+    "ko": "Korean",
+    "zh": "Chinese"
 }
 
 # 默认配置
@@ -36,7 +37,8 @@ dir_translated = {
     "es": "testdir/docs/es",
     "ar": "testdir/docs/ar",
     "ja": "testdir/docs/ja",
-    "ko": "testdir/docs/ko"
+    "ko": "testdir/docs/ko",
+    "zh": "testdir/docs/zh"
 }
 
 # Front Matter 处理规则
@@ -74,17 +76,6 @@ replace_rules = [
             "ar": "> يتم حماية هذا المقال بموجب اتفاقية [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by/4.0/deed.zh)، يُرجى ذكر المصدر عند إعادة النشر.",
             "ja": "> この記事は [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by/4.0/deed.ja) ライセンスで保護されています。転載の際は出典を明記してください。",
             "ko": "> 이 글은 [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by/4.0/deed.ko) 라이선스로 보호됩니다. 출처를 명시하여 재게시해 주세요."
-        }
-    },
-    {
-        # 文章中的站内链接，跳转为当前相同语言的网页
-        "orginal_text": "](https://wiki-power.com/",
-        "replaced_text": {
-            "en": "](https://wiki-power.com/en/",
-            "es": "](https://wiki-power.com/es/",
-            "ar": "](https://wiki-power.com/ar/",
-            "ja": "](https://wiki-power.com/ja/",
-            "ko": "](https://wiki-power.com/ko/"
         }
     }
 ]
@@ -151,20 +142,13 @@ def front_matter_replace(value, lang):
 
 # 定义调用 ChatGPT API 翻译的函数
 def translate_text(text, lang, type):
-    target_lang = {
-        "en": "English",
-        "es": "Spanish",
-        "ar": "Arabic",
-        "ja": "Japanese",  # 添加日语
-        "ko": "Korean"     # 添加韩语
-    }[lang]
+    target_lang = SUPPORTED_LANGUAGES[lang]
     
     # Front Matter 与正文内容使用不同的 prompt 翻译
     # 翻译 Front Matter。
     if type == "front-matter":
         completion = client.chat.completions.create(
-            # todo syj 替换 Model
-            model="gpt-3.5-turbo",
+            model="gpt-4-turbo",
             messages=[
                 {"role": "system", "content": "You are a professional translation engine, please translate the text into a colloquial, professional, elegant and fluent content, without the style of machine translation. You must only translate the text content, never interpret it."},
                 {"role": "user", "content": f"Translate into {target_lang}:\n\n{text}\n"},
@@ -172,10 +156,42 @@ def translate_text(text, lang, type):
         )  
     # 翻译正文
     elif type== "main-body":
+        system_prompt = """You are a professional translator specializing in Web3 and blockchain educational content.
+
+                            Your task is to translate Markdown-based educational material into target language, ensuring accuracy and fluency.
+
+                            Please follow these strict guidelines:
+
+                            1. Tone and Language
+                            • Use a conversational, professional, and natural tone
+                            • Avoid literal, awkward, or machine-like phrasing
+                            • Write as if explaining to a smart learner in the Web3 field
+
+                            2. Technical Terms
+                            • Preserve all blockchain-related terms (e.g., staking, EVM, Burn, Mint)
+                            • Do not translate or rephrase Web3-specific terminology
+
+                            3. Formatting and Structure
+                            • Preserve the original Markdown structure and formatting
+                            • Maintain all headings, bullet points, links, bold/italic text, code blocks, spacing, and indentation exactly as in the source
+
+                            4. Placeholders
+                            • Do not translate or modify placeholders like `[to_be_replace[x]]`
+                            • Keep them exactly as they appear
+
+                            5. Code Blocks
+                            • Translate comments inside code blocks, such as lines starting with //, #, or enclosed in /* */
+                            • Do not change the code itself—only translate the human-readable comments
+                            • Do not change formatting, indentation, or line order in code
+
+                            6. Output Rules
+                            • Output the final result in pure Markdown format only
+                            • Do not include any extra explanations or side notes"""
+
         completion = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4-turbo",
             messages=[
-                {"role": "system", "content": "You are a professional translation engine, please translate the text into a colloquial, professional, elegant and fluent content, without the style of machine translation. You must maintain the original markdown format. You must not translate the `[to_be_replace[x]]` field.You must only translate the text content, never interpret it."},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Translate into {target_lang}:\n\n{text}\n"},
             ],
         )
@@ -319,7 +335,7 @@ def translate_file(input_file, relative_path, lang):
 def main():
     # 创建命令行参数解析器
     parser = argparse.ArgumentParser(description='自动翻译 Markdown 文件')
-    parser.add_argument('source', help='源语言代码 (例如: zh)')
+    parser.add_argument('source', help='源语言代码 (例如: zh, en, ja)')
     parser.add_argument('target', nargs='+', help='目标语言代码列表 (例如: ja ko en)')
     parser.add_argument('--dir', default=DEFAULT_DIR_TO_TRANSLATE, help='要翻译的目录路径')
     parser.add_argument('--exclude', nargs='+', default=DEFAULT_EXCLUDE_LIST, help='要排除的文件列表')
@@ -328,15 +344,21 @@ def main():
     args = parser.parse_args()
     
     # 验证源语言
-    if args.source not in ["zh"]:
+    if args.source not in SUPPORTED_LANGUAGES:
         print(f"错误：不支持的源语言 '{args.source}'")
+        print(f"支持的语言: {', '.join(SUPPORTED_LANGUAGES.keys())}")
         sys.exit(1)
     
     # 验证目标语言
     invalid_langs = [lang for lang in args.target if lang not in SUPPORTED_LANGUAGES]
     if invalid_langs:
         print(f"错误：不支持的目标语言 {invalid_langs}")
-        print(f"支持的目标语言: {', '.join(SUPPORTED_LANGUAGES.keys())}")
+        print(f"支持的语言: {', '.join(SUPPORTED_LANGUAGES.keys())}")
+        sys.exit(1)
+    
+    # 验证源语言和目标语言不能相同
+    if args.source in args.target:
+        print(f"错误：源语言 '{args.source}' 不能与目标语言相同")
         sys.exit(1)
     
     # 设置工作目录和排除列表
