@@ -1,51 +1,37 @@
 # -*- coding: utf-8 -*-
 import os
-import openai  # pip install openai
 import sys
 import re
 import yaml  # pip install PyYAML
 import env
 import argparse
+import asyncio
+import shutil
+from typing import List, Dict, Any
+from openai import AsyncOpenAI
+from config import (
+    SYSTEM_PROMPTS,
+    MODEL_CONFIG,
+    MAX_LENGTH,
+    MAX_CONCURRENT_FILES,
+    SUPPORTED_LANGUAGES,
+    DEFAULT_DIR_TO_TRANSLATE,
+    DEFAULT_EXCLUDE_LIST,
+    DEFAULT_PROCESSED_LIST,
+    DIR_TRANSLATED
+)
 
 # 设置 OpenAI API Key 和 API Base 参数，通过 env.py 传入
-client = openai.OpenAI(
+client = AsyncOpenAI(
     api_key=os.environ.get("CHATGPT_API_KEY"),
     base_url=os.environ.get("CHATGPT_API_BASE")
 )
 
-# 设置最大输入字段，超出会拆分输入，防止超出输入字数限制
-max_length = 1800
-
-# 支持的语言列表
-SUPPORTED_LANGUAGES = {
-    "en": "English",
-    "es": "Spanish",
-    "ar": "Arabic",
-    "ja": "Japanese",
-    "ko": "Korean",
-    "zh": "Chinese"
-}
-
-# 默认配置
-DEFAULT_DIR_TO_TRANSLATE = "testdir/to-translate"
-DEFAULT_EXCLUDE_LIST = ["index.md", "Contact-and-Subscribe.md", "WeChat.md"]
-DEFAULT_PROCESSED_LIST = "processed_list.txt"
-
-# 设置翻译的路径
-dir_translated = {
-    "en": "testdir/docs/en",
-    "es": "testdir/docs/es",
-    "ar": "testdir/docs/ar",
-    "ja": "testdir/docs/ja",
-    "ko": "testdir/docs/ko",
-    "zh": "testdir/docs/zh"
-}
-
 # Front Matter 处理规则
 front_matter_translation_rules = {
     # 调用 ChatGPT 自动翻译
-    "title": lambda value, lang: translate_text(value, lang,"front-matter"),
-    "description": lambda value, lang: translate_text(value, lang,"front-matter"),
+    "title": lambda value, lang: asyncio.create_task(translate_text(value, lang, "front-matter")),
+    "description": lambda value, lang: asyncio.create_task(translate_text(value, lang, "front-matter")),
     
     # 使用固定的替换规则
     "categories": lambda value, lang: front_matter_replace(value, lang),
@@ -55,6 +41,7 @@ front_matter_translation_rules = {
 }
 
 # 固定字段替换规则。文章中一些固定的字段，不需要每篇都进行翻译，且翻译结果可能不一致，所以直接替换掉。
+# todo syj 增加固定替换的内容
 replace_rules = [
     {
         # 版权信息手动翻译
@@ -141,116 +128,85 @@ def front_matter_replace(value, lang):
     return value
 
 # 定义调用 ChatGPT API 翻译的函数
-def translate_text(text, lang, type):
+async def translate_text(text, lang, type):
     target_lang = SUPPORTED_LANGUAGES[lang]
     
     # Front Matter 与正文内容使用不同的 prompt 翻译
-    # 翻译 Front Matter。
-    if type == "front-matter":
-        completion = client.chat.completions.create(
-            model="gpt-4-turbo",
-            messages=[
-                {"role": "system", "content": "You are a professional translation engine, please translate the text into a colloquial, professional, elegant and fluent content, without the style of machine translation. You must only translate the text content, never interpret it."},
-                {"role": "user", "content": f"Translate into {target_lang}:\n\n{text}\n"},
-            ],
-        )  
-    # 翻译正文
-    elif type== "main-body":
-        system_prompt = """You are a professional translator specializing in Web3 and blockchain educational content.
-
-                            Your task is to translate Markdown-based educational material into target language, ensuring accuracy and fluency.
-
-                            Please follow these strict guidelines:
-
-                            1. Tone and Language
-                            • Use a conversational, professional, and natural tone
-                            • Avoid literal, awkward, or machine-like phrasing
-                            • Write as if explaining to a smart learner in the Web3 field
-
-                            2. Technical Terms
-                            • Preserve all blockchain-related terms (e.g., staking, EVM, Burn, Mint)
-                            • Do not translate or rephrase Web3-specific terminology
-
-                            3. Formatting and Structure
-                            • Preserve the original Markdown structure and formatting
-                            • Maintain all headings, bullet points, links, bold/italic text, code blocks, spacing, and indentation exactly as in the source
-
-                            4. Placeholders
-                            • Do not translate or modify placeholders like `[to_be_replace[x]]`
-                            • Keep them exactly as they appear
-
-                            5. Code Blocks
-                            • Translate comments inside code blocks, such as lines starting with //, #, or enclosed in /* */
-                            • Do not change the code itself—only translate the human-readable comments
-                            • Do not change formatting, indentation, or line order in code
-
-                            6. Output Rules
-                            • Output the final result in pure Markdown format only
-                            • Do not include any extra explanations or side notes"""
-
-        completion = client.chat.completions.create(
-            model="gpt-4-turbo",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Translate into {target_lang}:\n\n{text}\n"},
-            ],
-        )
+    completion = await client.chat.completions.create(
+        model=MODEL_CONFIG[type],
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPTS[type]},
+            {"role": "user", "content": f"Translate into {target_lang}:\n\n{text}\n"},
+        ],
+        stream=False,
+        temperature=1.3
+    )
 
     # 获取翻译结果
     output_text = completion.choices[0].message.content
     return output_text
 
 # Front Matter 处理规则
-def translate_front_matter(front_matter, lang):
+async def translate_front_matter(front_matter, lang):
     translated_front_matter = {}
     for key, value in front_matter.items():
         if key in front_matter_translation_rules:
             processed_value = front_matter_translation_rules[key](value, lang)
+            if asyncio.iscoroutine(processed_value) or isinstance(processed_value, asyncio.Task):
+                processed_value = await processed_value
         else:
             # 如果在规则列表内，则不做任何翻译或替换操作
             processed_value = value
         translated_front_matter[key] = processed_value
-        # print(key, ":", processed_value)
     return translated_front_matter
 
-# 定义文章拆分函数
-def split_text(text, max_length):
-    # 根据段落拆分文章
-    paragraphs = text.split("\n\n")
-    output_paragraphs = []
-    current_paragraph = ""
+# 支持的图片文件扩展名
+SUPPORTED_IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg']
 
-    for paragraph in paragraphs:
-        if len(current_paragraph) + len(paragraph) + 2 <= max_length:
-            # 如果当前段落加上新段落的长度不超过最大长度，就将它们合并
-            if current_paragraph:
-                current_paragraph += "\n\n"
-            current_paragraph += paragraph
-        else:
-            # 否则将当前段落添加到输出列表中，并重新开始一个新段落
-            output_paragraphs.append(current_paragraph)
-            current_paragraph = paragraph
+# 支持的视频文件扩展名
+SUPPORTED_VIDEO_EXTENSIONS = ['.mp4', '.avi', '.mov', '.wmv', '.flv', '.mkv', '.webm']
 
-    # 将最后一个段落添加到输出列表中
-    if current_paragraph:
-        output_paragraphs.append(current_paragraph)
+def is_image_file(filename: str) -> bool:
+    """检查文件是否为图片文件"""
+    return any(filename.lower().endswith(ext) for ext in SUPPORTED_IMAGE_EXTENSIONS)
 
-    # 将输出段落合并为字符串
-    output_text = "\n\n".join(output_paragraphs)
+def is_video_file(filename: str) -> bool:
+    """检查文件是否为视频文件"""
+    return any(filename.lower().endswith(ext) for ext in SUPPORTED_VIDEO_EXTENSIONS)
 
-    return output_text
+def is_media_file(filename: str) -> bool:
+    """检查文件是否为媒体文件（图片或视频）"""
+    return is_image_file(filename) or is_video_file(filename)
 
-# 定义翻译文件的函数
-def translate_file(input_file, relative_path, lang):
+def copy_media_file(input_file: str, output_file: str) -> None:
+    """拷贝图片文件到目标目录"""
+    # 确保目标目录存在
+    output_dir = os.path.dirname(output_file)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    # 拷贝文件
+    shutil.copy2(input_file, output_file)
+
+async def translate_file_async(input_file: str, relative_path: str, lang: str) -> None:
+    """异步处理单个文件的翻译"""
     print(f"Translating into {lang}: {relative_path}")
     sys.stdout.flush()
 
+    # 如果是媒体文件（图片或视频），只在目标语言目录下拷贝
+    if is_media_file(input_file):
+        output_dir = os.path.join(DIR_TRANSLATED[lang], os.path.dirname(relative_path))
+        output_file = os.path.join(output_dir, os.path.basename(relative_path))
+        copy_media_file(input_file, output_file)
+        return
+
     # 定义输出文件
-    if lang in dir_translated:
-        output_dir = os.path.join(dir_translated[lang], os.path.dirname(relative_path))
+    if lang in DIR_TRANSLATED:
+        output_dir = os.path.join(DIR_TRANSLATED[lang], os.path.dirname(relative_path))
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        output_file = os.path.join(output_dir, os.path.basename(relative_path))
+        # 将输出文件扩展名改为 .txt
+        output_file = os.path.join(output_dir, os.path.splitext(os.path.basename(relative_path))[0] + '.txt')
 
     # 读取输入文件内容
     with open(input_file, "r", encoding="utf-8") as f:
@@ -275,7 +231,7 @@ def translate_file(input_file, relative_path, lang):
         front_matter_data = yaml.safe_load(front_matter_text)
 
         # 按照前文的规则对 Front Matter 进行翻译
-        front_matter_data = translate_front_matter(front_matter_data, lang)
+        front_matter_data = await translate_front_matter(front_matter_data, lang)
 
         # 将处理完的数据转换回 YAML
         front_matter_text_processed = yaml.dump(
@@ -294,28 +250,31 @@ def translate_file(input_file, relative_path, lang):
     current_paragraph = ""
 
     for paragraph in paragraphs:
-        if len(current_paragraph) + len(paragraph) + 2 <= max_length:
+        if len(current_paragraph) + len(paragraph) + 2 <= MAX_LENGTH:
             # 如果当前段落加上新段落的长度不超过最大长度，就将它们合并
             if current_paragraph:
                 current_paragraph += "\n\n"
             current_paragraph += paragraph
         else:
             # 否则翻译当前段落，并将翻译结果添加到输出列表中
-            output_paragraphs.append(translate_text(current_paragraph, lang, "main-body"))
+            translated_text = await translate_text(current_paragraph, lang, "main-body")
+            output_paragraphs.append(translated_text)
             current_paragraph = paragraph
 
     # 处理最后一个段落
     if current_paragraph:
-        if len(current_paragraph) + len(input_text) <= max_length:
+        if len(current_paragraph) + len(input_text) <= MAX_LENGTH:
             # 如果当前段落加上之前的文本长度不超过最大长度，就将它们合并
             input_text += "\n\n" + current_paragraph
         else:
             # 否则翻译当前段落，并将翻译结果添加到输出列表中
-            output_paragraphs.append(translate_text(current_paragraph, lang,"main-body"))
+            translated_text = await translate_text(current_paragraph, lang, "main-body")
+            output_paragraphs.append(translated_text)
 
     # 如果还有未翻译的文本，就将它们添加到输出列表中
     if input_text:
-        output_paragraphs.append(translate_text(input_text, lang,"main-body"))
+        translated_text = await translate_text(input_text, lang, "main-body")
+        output_paragraphs.append(translated_text)
 
     # 将输出段落合并为字符串
     output_text = "\n\n".join(output_paragraphs)
@@ -332,61 +291,66 @@ def translate_file(input_file, relative_path, lang):
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(output_text)
 
-def main():
-    # 创建命令行参数解析器
-    parser = argparse.ArgumentParser(description='自动翻译 Markdown 文件')
-    parser.add_argument('source', help='源语言代码 (例如: zh, en, ja)')
-    parser.add_argument('target', nargs='+', help='目标语言代码列表 (例如: ja ko en)')
-    parser.add_argument('--dir', default=DEFAULT_DIR_TO_TRANSLATE, help='要翻译的目录路径')
-    parser.add_argument('--exclude', nargs='+', default=DEFAULT_EXCLUDE_LIST, help='要排除的文件列表')
+async def process_files_async(files_to_translate: List[tuple], target_langs: List[str]) -> None:
+    """并发处理多个文件"""
+    tasks = []
+    for input_file, relative_path in files_to_translate:
+        for lang in target_langs:
+            tasks.append(translate_file_async(input_file, relative_path, lang))
     
-    # 解析命令行参数
-    args = parser.parse_args()
+    # 使用信号量限制并发数
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_FILES)
+    async def bounded_process(task):
+        async with semaphore:
+            return await task
     
-    # 验证源语言
-    if args.source not in SUPPORTED_LANGUAGES:
-        print(f"错误：不支持的源语言 '{args.source}'")
-        print(f"支持的语言: {', '.join(SUPPORTED_LANGUAGES.keys())}")
-        sys.exit(1)
-    
-    # 验证目标语言
-    invalid_langs = [lang for lang in args.target if lang not in SUPPORTED_LANGUAGES]
-    if invalid_langs:
-        print(f"错误：不支持的目标语言 {invalid_langs}")
-        print(f"支持的语言: {', '.join(SUPPORTED_LANGUAGES.keys())}")
-        sys.exit(1)
-    
-    # 验证源语言和目标语言不能相同
-    if args.source in args.target:
-        print(f"错误：源语言 '{args.source}' 不能与目标语言相同")
-        sys.exit(1)
-    
-    # 设置工作目录和排除列表
-    dir_to_translate = args.dir
-    exclude_list = args.exclude
-    processed_list = DEFAULT_PROCESSED_LIST
-    
+    await asyncio.gather(*[bounded_process(task) for task in tasks])
+
+async def main_async():
     try:
-        # 创建一个外部列表文件，存放已处理的 Markdown 文件名列表
-        if not os.path.exists(processed_list):
-            with open(processed_list, "w", encoding="utf-8") as f:
-                print("processed_list created")
-                sys.stdout.flush()
+        # 创建命令行参数解析器
+        parser = argparse.ArgumentParser(description='自动翻译 Markdown 文件')
+        parser.add_argument('source', help='源语言代码 (例如: zh, en, ja)')
+        parser.add_argument('target', nargs='+', help='目标语言代码列表 (例如: ja ko en)')
+        parser.add_argument('--dir', default=DEFAULT_DIR_TO_TRANSLATE, help='要翻译的目录路径')
+        parser.add_argument('--exclude', nargs='+', default=DEFAULT_EXCLUDE_LIST, help='要排除的文件列表')
+        
+        # 解析命令行参数
+        args = parser.parse_args()
+        
+        # 设置工作目录和排除列表
+        dir_to_translate = args.dir
+        exclude_list = args.exclude
+        processed_list = DEFAULT_PROCESSED_LIST
+        
+        try:
+            # 创建一个外部列表文件，存放已处理的 Markdown 文件名列表
+            if not os.path.exists(processed_list):
+                with open(processed_list, "w", encoding="utf-8") as f:
+                    print("processed_list created")
+                    sys.stdout.flush()
 
-        # 读取已处理的文件列表
-        with open(processed_list, "r", encoding="utf-8") as f:
-            processed_list_content = f.read().splitlines()
+            # 读取已处理的文件列表
+            with open(processed_list, "r", encoding="utf-8") as f:
+                processed_list_content = f.read().splitlines()
 
-        # 使用 os.walk 递归遍历目录
-        for root, dirs, files in os.walk(dir_to_translate):
-            # 按文件名称顺序排序
-            sorted_files = sorted(files)
-            
-            for filename in sorted_files:
-                if filename.endswith(".md"):
+            # 收集需要翻译的文件
+            files_to_translate = []
+            for root, dirs, files in os.walk(dir_to_translate):
+                # 按文件名称顺序排序
+                sorted_files = sorted(files)
+                
+                for filename in sorted_files:
                     # 获取相对路径
                     relative_path = os.path.relpath(os.path.join(root, filename), dir_to_translate)
                     input_file = os.path.join(root, filename)
+
+                    # 检查是否是以特定前缀开头的文件或目录
+                    path_parts = relative_path.split(os.sep)
+                    if any(part.startswith(('Course Info', 'Unit Info', 'Lesson Info')) for part in path_parts):
+                        print(f"Pass the file with special prefix: {relative_path}")
+                        sys.stdout.flush()
+                        continue
 
                     if filename in exclude_list:  # 不进行翻译
                         print(f"Pass the post in exclude_list: {relative_path}")
@@ -394,28 +358,38 @@ def main():
                     elif relative_path in processed_list_content:  # 不进行翻译
                         print(f"Pass the post in processed_list: {relative_path}")
                         sys.stdout.flush()
-                    else:  # 翻译为所有目标语言
-                        for lang in args.target:
-                            translate_file(input_file, relative_path, lang)
+                    elif filename.endswith(".md") or is_media_file(filename):  # 需要处理的文件
+                        files_to_translate.append((input_file, relative_path))
 
-                    # 将处理完成的文件名加到列表，下次跳过不处理
-                    if relative_path not in processed_list_content:
-                        print(f"Added into processed_list: {relative_path}")
-                        with open(processed_list, "a", encoding="utf-8") as f:
-                            f.write(f"{relative_path}\n")
+            # print(f"files_to_translate: {files_to_translate}")
+            # 并发处理文件
+            await process_files_async(files_to_translate, args.target)
 
-                    # 强制将缓冲区中的数据刷新到终端中，使用 GitHub Action 时方便实时查看过程
-                    sys.stdout.flush()
+            # 将处理完成的文件名加到列表
+            for _, relative_path in files_to_translate:
+                if relative_path not in processed_list_content:
+                    print(f"Added into processed_list: {relative_path}")
+                    with open(processed_list, "a", encoding="utf-8") as f:
+                        f.write(f"{relative_path}\n")
 
-        # 所有任务完成的提示
-        print("Congratulations! All files processed done.")
-        sys.stdout.flush()
+            # 所有任务完成的提示
+            print("Congratulations! All files processed done.")
+            sys.stdout.flush()
+
+        except Exception as e:
+            # 捕获异常并输出错误信息
+            print(f"An error has occurred: {e}")
+            sys.stdout.flush()
+            raise SystemExit(1)
 
     except Exception as e:
         # 捕获异常并输出错误信息
         print(f"An error has occurred: {e}")
         sys.stdout.flush()
         raise SystemExit(1)
+
+def main():
+    asyncio.run(main_async())
 
 if __name__ == "__main__":
     main()

@@ -4,3 +4,4 @@ processed_list.txt
 testdir/docs/
 .vscode/settings.json
 .venv/
+.env
