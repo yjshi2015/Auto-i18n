@@ -224,7 +224,8 @@ async def translate_file_async(input_file: str, relative_path: str, lang: str) -
         placeholder_dict[placeholder] = replace_with
 
     # 使用正则表达式来匹配 Front Matter
-    front_matter_match = re.search(r'---\n(.*?)\n---', input_text, re.DOTALL)
+    front_matter_match = re.search(r'^---\s*\n(.*?)\n---\s*\n', input_text, re.DOTALL)
+    front_matter_text = ""
     if front_matter_match:
         front_matter_text = front_matter_match.group(1)
         # 使用PyYAML加载YAML格式的数据
@@ -290,6 +291,17 @@ async def translate_file_async(input_file: str, relative_path: str, lang: str) -
     # 写入输出文件
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(output_text)
+        
+    # 在文件成功翻译完成后，将其添加到 processed_list
+    # 先读取已处理的文件列表
+    with open(DEFAULT_PROCESSED_LIST, "r", encoding="utf-8") as f:
+        processed_list_content = f.read().splitlines()
+    
+    # 只有当文件不在列表中时才添加
+    if relative_path not in processed_list_content:
+        print(f"Added into processed_list: {relative_path}")
+        with open(DEFAULT_PROCESSED_LIST, "a", encoding="utf-8") as f:
+            f.write(f"{relative_path}\n")
 
 async def process_files_async(files_to_translate: List[tuple], target_langs: List[str]) -> None:
     """并发处理多个文件"""
@@ -348,7 +360,7 @@ async def main_async():
                     # 检查是否是以特定前缀开头的文件或目录
                     path_parts = relative_path.split(os.sep)
                     if any(part.startswith(('Course Info', 'Unit Info', 'Lesson Info')) for part in path_parts):
-                        print(f"Pass the file with special prefix: {relative_path}")
+                        # print(f"Pass the file with special prefix: {relative_path}")
                         sys.stdout.flush()
                         continue
 
@@ -364,13 +376,6 @@ async def main_async():
             # print(f"files_to_translate: {files_to_translate}")
             # 并发处理文件
             await process_files_async(files_to_translate, args.target)
-
-            # 将处理完成的文件名加到列表
-            for _, relative_path in files_to_translate:
-                if relative_path not in processed_list_content:
-                    print(f"Added into processed_list: {relative_path}")
-                    with open(processed_list, "a", encoding="utf-8") as f:
-                        f.write(f"{relative_path}\n")
 
             # 所有任务完成的提示
             print("Congratulations! All files processed done.")

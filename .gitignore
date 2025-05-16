@@ -5,3 +5,4 @@ testdir/docs/
 .vscode/settings.json
 .venv/
 .env
+logs/
