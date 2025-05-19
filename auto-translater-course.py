@@ -44,14 +44,80 @@ front_matter_translation_rules = {
 # todo syj 增加固定替换的内容
 replace_rules = [
     {
-        # 版权信息手动翻译
-        "orginal_text": "> 原文地址：<https://wiki-power.com/>",
+        # 固定标题,不翻译,直接 Replace 替换
+        "orginal_text": "# Content",
         "replaced_text": {
-            "en": "> Original: <https://wiki-power.com/>",
-            "es": "> Dirección original del artículo: <https://wiki-power.com/>",
-            "ar": "> عنوان النص: <https://wiki-power.com/>",
-            "ja": "> 原文のアドレス：<https://wiki-power.com/>",
-            "ko": "> 원문 주소：<https://wiki-power.com/>"
+            "en": "# Content",
+            "es": "# Content",
+            "ar": "# Content",
+            "ja": "# Content",
+            "ko": "# Content"
+        }
+    },
+    {
+        # 固定标题,不翻译,直接 Replace 替换
+        "orginal_text": "# Article",
+        "replaced_text": {
+            "en": "# Article",
+            "es": "# Article",
+            "ar": "# Article",
+            "ja": "# Article",
+            "ko": "# Article"
+        }
+    },
+    {
+        # 固定标题,不翻译,直接 Replace 替换
+        "orginal_text": "// regex starts here",
+        "replaced_text": {
+            "en": "// regex starts here",
+            "es": "// regex starts here",
+            "ar": "// regex starts here",
+            "ja": "// regex starts here",
+            "ko": "// regex starts here"
+        }
+    },
+    {
+        # 固定标题,不翻译,直接 Replace 替换
+        "orginal_text": "// regex ends here",
+        "replaced_text": {
+            "en": "// regex ends here",
+            "es": "// regex ends here",
+            "ar": "// regex ends here",
+            "ja": "// regex ends here",
+            "ko": "// regex ends here"
+        }
+    },
+    {
+        # 固定标题,不翻译,直接 Replace 替换
+        "orginal_text": "# Hint",
+        "replaced_text": {
+            "en": "# Hint",
+            "es": "# Hint",
+            "ar": "# Hint",
+            "ja": "# Hint",
+            "ko": "# Hint"
+        }
+    },
+    {
+        # 固定标题,不翻译,直接 Replace 替换
+        "orginal_text": "# Quiz",
+        "replaced_text": {
+            "en": "# Quiz",
+            "es": "# Quiz",
+            "ar": "# Quiz",
+            "ja": "# Quiz",
+            "ko": "# Quiz"
+        }
+    },
+    {
+        # 固定标题,不翻译,直接 Replace 替换
+        "orginal_text": "# Example",
+        "replaced_text": {
+            "en": "# Example",
+            "es": "# Example",
+            "ar": "# Example",
+            "ja": "# Example",
+            "ko": "# Example"
         }
     },
     {
@@ -211,6 +277,8 @@ async def translate_file_async(input_file: str, relative_path: str, lang: str) -
     # 读取输入文件内容
     with open(input_file, "r", encoding="utf-8") as f:
         input_text = f.read()
+    # 删除 [Lesson Info](xxx) 这样的行
+    input_text = re.sub(r'^\[Lesson Info\]\([^)]+\)\s*$', '', input_text, flags=re.MULTILINE)
 
     # 创建一个字典来存储占位词和对应的替换文本
     placeholder_dict = {}
